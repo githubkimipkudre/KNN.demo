@@ -1,0 +1,261 @@
+#include <iostream>
+#include <vector>
+#include <string>
+#include <sstream>
+#include <fstream>
+#include <cmath>
+#include <algorithm>
+#include <map>
+#include <random>
+
+using namespace std;
+struct Node {
+    vector<long double> data;
+    int label;
+};
+
+// 读取文件中的数据
+void scanData(const string& address, vector<Node>& infos) {
+    ifstream ifile(address);
+    if (!ifile.is_open()) {
+        cerr << "Error opening file: " << address << endl;
+        return;
+    }
+    string line;
+    while (getline(ifile, line)) {
+        stringstream ss(line);
+        long double val;
+        vector<long double> temp;
+        while (ss >> val) {
+            temp.push_back(val);
+        }
+        int label = static_cast<int>(temp.back());
+        temp.pop_back();
+        infos.push_back({ temp, label });
+    }
+    ifile.close();
+}
+
+// 显示数据信息
+void showData(const vector<Node>& infos) {
+    for (const auto& node : infos) {
+        cout << "Label: " << node.label << endl;
+        cout << "Features: ";
+        for (long double feature : node.data) {
+            cout << feature << " ";
+        }
+        cout << endl << endl;
+    }
+}
+
+// 计算欧式距离
+double calc_O(const Node& n1, const Node& n2) {
+    double distance = 0.0;
+    for (size_t i = 0; i < n1.data.size(); i++) {
+        distance += pow(n1.data[i] - n2.data[i], 2);
+    }
+    return sqrt(distance);
+}
+//计算曼哈顿距离
+double calc_M(const Node& n1, const Node& n2) {
+    double distance = 0.0;
+    for (size_t i = 0; i < n1.data.size(); i++) {
+        distance += abs(n1.data[i] - n2.data[i]);
+    }
+    return distance;
+}
+// KNN 算法
+int knn(const vector<Node>& train_data, const vector<long double>& test_data, int k, int cal) {
+    // 计算测试样本与所有训练样本的距离
+    vector<pair<double, int>> distances;
+    for (size_t i = 0; i < train_data.size(); ++i) {
+        double distance = 0.0;
+        switch (cal) {
+        case 1:
+           distance = calc_O(train_data[i], { test_data, -1 });
+        case 2:
+            distance = calc_M(train_data[i], { test_data, -1 });
+        }
+        distances.push_back({ distance, train_data[i].label });
+    }
+        // 对距离进行排序
+        sort(distances.begin(), distances.end());
+
+        // 统计出现频率
+        map<int, int> class_freq;
+        for (int i = 0; i < k; ++i) {
+            int index = distances[i].second;
+            class_freq[index]++;
+        }
+
+        // 找到频率最高的类别
+        int max_freq = 0;
+        int result_label = -1;
+        for (const auto& pair : class_freq) {
+            if (pair.second > max_freq) {
+                max_freq = pair.second;
+                result_label = pair.first;
+            }
+        }
+
+        return result_label;
+    }
+
+// 随机分割数据集的函数
+void randomMix(const vector<Node>& resource, vector<Node>& traingroup, vector<Node>& testgroup, double per)
+{
+    random_device num;                      // 随机数生成器
+    mt19937 generate_(num());               // 基于Mersenne Twister的随机数发生器
+    uniform_real_distribution<> flow(0, 1); // 均匀分布
+
+    for (auto elem : resource)
+    {
+        if (flow(generate_) < per)
+        { // 根据比例随机分配元素
+            traingroup.push_back(elem);
+        }
+        else
+        {
+            testgroup.push_back(elem);
+        }
+    }
+}
+
+
+vector<double> knn_test(const vector<Node>& traingroup, const vector<Node>& testgroup, int k) {
+    // 计算测试样本与所有训练样本的距离
+    int correct_O = 0;
+    int correct_M = 0;
+    vector<pair<double, int>> distances_O;
+    vector<pair<double, int>> distances_M;
+    for (size_t m = 0; m < testgroup.size(); ++m) {
+        for (size_t i = 0; i < traingroup.size(); ++i) {
+            double distance_O = 0.0;
+            double distance_M = 0.0;
+            distance_O = calc_O(traingroup[i], testgroup[m]);
+            distance_M = calc_M(traingroup[i], testgroup[m]);
+            distances_O.push_back({ distance_O, traingroup[i].label });
+            distances_M.push_back({ distance_M, traingroup[i].label });
+        }
+        // 对距离进行排序
+        sort(distances_O.begin(), distances_O.end());
+        sort(distances_M.begin(), distances_M.end());
+        // 统计出现频率
+        map<int, int> class_freq_O;
+        map<int, int> class_freq_M;
+        for (int i = 0; i < k; ++i) {
+            int index_O = distances_O[i].second;
+            class_freq_O[index_O]++;
+            int index_M = distances_M[i].second;
+            class_freq_M[index_M]++;
+        }
+
+        // 找到频率最高的类别
+        int max_freq_O = 0;
+        int max_freq_M = 0;
+        int result_label_O = -1;
+        int result_label_M = -1;
+        for (const auto& pair : class_freq_O) {
+            if (pair.second > max_freq_O) {
+                max_freq_O = pair.second;
+                result_label_O = pair.first;
+            }
+        }
+        for (const auto& pair : class_freq_M) {
+            if (pair.second > max_freq_M) {
+                max_freq_M = pair.second;
+                result_label_M = pair.first;
+            }
+        }
+        if (result_label_O == testgroup[m].label)
+            correct_O++;
+        if (result_label_M == testgroup[m].label)
+            correct_M++;
+    }
+    double score1;
+    double score2;
+    vector<double>ans;
+    score1 = 1.0 * correct_O / testgroup.size();
+    ans.push_back(score1);
+    score2 = 1.0 * correct_M / testgroup.size();
+    ans.push_back(score2);
+    return ans;
+}
+// 创建用户交互菜单
+int showMenu() {
+    cout << "**************" << endl;
+    cout << "1.显示数据信息" << endl;
+    cout << "2.评估模型" << endl;
+    cout << "3.预测推理" << endl;
+    cout << "4.退出程序" << endl;
+    cout << "**************" << endl;
+    int num;
+    cout << "请输入您的选择：" << endl;
+    cin >> num;
+    while (!(num == 1 || num == 2 || num == 3 || num == 4)) {
+        cout << "输入的数字不符合要求，请重新输入：" << endl;
+        cin >> num;
+    }
+    return num;
+}
+
+int main() {
+func:
+    vector<Node> infos;
+    string address;
+
+    int mode = showMenu();
+    if (mode == 4) return 0;
+
+    cout << "请输入数据集地址：" << endl;
+    cin >> address;
+    scanData(address, infos);
+
+    switch (mode) {
+    case 1:
+        showData(infos);
+        break;
+    case 2:
+    {
+        cout << "请输入训练集占比：" << endl;
+        double per;
+        cin >> per;
+        int k;
+        cout << "请输入k值：" << endl;
+        cin >> k;
+        vector<Node> traingroup;
+        vector<Node> testgroup;
+        randomMix(infos, traingroup, testgroup, per);
+        vector<double>ans = knn_test(traingroup, testgroup, k);
+        cout << "若采用欧式距离，正确率为："
+            << ans[0] * 100 << "%" << "，"
+            << "若采用曼哈顿距离，正确率为："
+            << ans[1] * 100 << "%。" << endl;
+        break;
+    }
+    case 3:
+    {
+        cout << "请输入测试的数据（用空格分隔）："<<endl;
+        cin.ignore(); // 清除输入缓冲区
+        string l;
+        getline(cin, l);
+        vector<long double> test_data;
+        stringstream ss(l);
+        long double item;
+        while (ss >> item) {
+            test_data.push_back(item);
+        }
+        cout << "请输入k值：" << endl;
+        int k;
+        cin >> k;
+        cout << "若计算欧式距离，请输入1，若计算曼哈顿距离，请输入2：" << endl;
+        int cal;
+        cin >> cal;
+        int predicted_label = knn(infos, test_data, k, cal);
+        cout << "预测的类型为：" << predicted_label << endl;
+        break;
+    }
+    }
+
+    goto func;
+}
